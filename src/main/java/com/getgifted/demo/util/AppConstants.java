@@ -11,9 +11,12 @@ public class AppConstants {
 	public static final String BASE_URL = "/api/v1";
 
 	/** The Constant FEED_URL. */
-	public static final String FEED_URL = "/feeds";
+	public static final String FEED_URL = "/feed";
 	/** The Constant FEEDS_URL. */
 	public static final String FEEDS_URL = "/feeds";
+	
+	/** The Constant FEED_BY_ID_URL. */
+	public static final String FEED_BY_ID_URL = "/feed/{id}";
 	
 	/** The Constant RSSS_URL. */
 	public static final String RSS_URL = "http://localhost:8080/inventory/api/v1/carts";
