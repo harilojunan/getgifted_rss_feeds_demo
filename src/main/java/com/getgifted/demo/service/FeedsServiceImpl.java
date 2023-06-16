@@ -1,7 +1,6 @@
 package com.getgifted.demo.service;
 
 import java.util.List;
-import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,20 +12,50 @@ import com.getgifted.demo.exception.ResourceAlreadyFoundException;
 import com.getgifted.demo.exception.ResourceNotFoundException;
 import com.getgifted.demo.repo.FeedsRepo;
 
+/**
+ * The Class FeedsServiceImpl.
+ */
 @Service
 public class FeedsServiceImpl implements FeedsService {
-	
+
+	/** The feeds repo. */
 	@Autowired
 	private FeedsRepo feedsRepo;
-	
+
+	/**
+	 * Instantiates a new feeds service impl.
+	 *
+	 * @param feedsRepo the feeds repo
+	 */
 	public FeedsServiceImpl(FeedsRepo feedsRepo) {
 		this.feedsRepo = feedsRepo;
 	}
-	
-	private static final Logger logger = LoggerFactory.getLogger(FeedsService.class);
 
+	/** The Constant logger. */
+	private static final Logger logger = LoggerFactory.getLogger(FeedsService.class);
+	
+
+	/**
+	 * Gets the all feeds.
+	 *
+	 * @return the all feeds
+	 * @throws ResourceNotFoundException the resource not found exception
+	 */
 	@Override
-	public Feeds saveFeed(Feeds feedsData) throws ResourceAlreadyFoundException {
+	public List<Feeds> getAllFeeds() throws ResourceNotFoundException {
+		logger.info("Logging Stated!!! Inside Feeds Service @Get All Feeds Method Running");
+		return feedsRepo.findAll();
+	}
+
+	/**
+	 * Gets the rss feeds.
+	 *
+	 * @param feedsData the feeds data
+	 * @return the rss feeds
+	 * @throws ResourceAlreadyFoundException the resource already found exception
+	 */
+	@Override
+	public Feeds getRssFeeds(Feeds feedsData) throws ResourceAlreadyFoundException {
 		logger.info("Logging Stated!!! Inside Feeds Service @Save Feed Method Running");
 		if (feedsRepo.existsById(feedsData.getId())) {
 			throw new ResourceAlreadyFoundException("Feed already found");
@@ -35,22 +64,23 @@ public class FeedsServiceImpl implements FeedsService {
 		return savedFeeds;
 	}
 
+	/**
+	 * Update rss feeds.
+	 *
+	 * @param feedsData the feeds data
+	 * @return the feeds
+	 * @throws ResourceAlreadyFoundException the resource already found exception
+	 */
 	@Override
-	public List<Feeds> getAllFeeds() throws ResourceNotFoundException {
-		logger.info("Logging Stated!!! Inside Feeds Service @Get All Feeds Method Running");
-		return feedsRepo.findAll();
-	}
-
-	@Override
-	public Feeds updateFeed(Feeds feedsData, Long id) throws ResourceNotFoundException {
+	public Feeds updateRssFeeds(Feeds feedsData) throws ResourceAlreadyFoundException {
 		logger.info("Logging Stated!!! Inside Feeds Service @Find By ID Feed Method Running");
 
-		if (feedsRepo.existsById(feedsData.getId()) == false) {
-			throw new ResourceNotFoundException("Feeds not found with id :" + id);
+		if (feedsRepo.existsByTitle(feedsData.getTitle()) == true) {
+			throw new ResourceAlreadyFoundException("Feeds already found with title :" + feedsData.getTitle());
 		} else {
-			Optional<Feeds> feed = feedsRepo.findById(id);
+			Feeds feed = new Feeds();
 			logger.info("Loggig Stated!!! Inside Feeds Service @Update Feed Method Running");
-			feed.get().setId(feedsData.getId());
+			feed.setId(feedsData.getId());
 			Feeds updatedFeeds = feedsRepo.save(feedsData);
 			return updatedFeeds;
 		}

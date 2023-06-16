@@ -1,10 +1,10 @@
 package com.getgifted.demo.controller;
 
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,12 +16,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -33,20 +30,37 @@ import com.getgifted.demo.repo.FeedsRepo;
 import com.getgifted.demo.service.FeedsService;
 import com.getgifted.demo.util.AppConstants;
 
+import org.w3c.dom.*;
+import org.xml.sax.InputSource;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
+/**
+ * The Class FeedsController.
+ */
 @RestController
 @RequestMapping(AppConstants.BASE_URL)
 @CrossOrigin(origins = AppConstants.CROSS_ORIGIN_URL)
 public class FeedsController {
 
+	/** The feeds service. */
 	@Autowired
 	private FeedsService feedsService;
 
+	/** The feeds repo. */
 	@Autowired
 	private FeedsRepo feedsRepo;
 
 	/** The logger. */
 	private static final Logger logger = LoggerFactory.getLogger(FeedsController.class);
 
+	/**
+	 * Gets the sort direction.
+	 *
+	 * @param direction the direction
+	 * @return the sort direction
+	 */
 	private Sort.Direction getSortDirection(String direction) {
 		if (direction.equals("asc")) {
 			return Sort.Direction.ASC;
@@ -57,24 +71,97 @@ public class FeedsController {
 		return Sort.Direction.ASC;
 	}
 
-	@PostMapping(AppConstants.FEED_URL)
-	public ResponseEntity<?> saveFeed(@RequestBody Feeds feeds) throws ResourceAlreadyFoundException {
-		logger.info("Logging Stated!!! Inside Feeds Controller @Save Feeds Method Initiated");
-		Feeds savedFeed = feedsService.saveFeed(feeds);
-
-		if (null != savedFeed) {
-			return new ResponseEntity<Feeds>(savedFeed, HttpStatus.CREATED);
-		} else {
-			return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+	/**
+	 * Gets the element value.
+	 *
+	 * @param parentElement the parent element
+	 * @param tagName the tag name
+	 * @return the element value
+	 */
+	private static String getElementValue(Element parentElement, String tagName) {
+		NodeList nodeList = parentElement.getElementsByTagName(tagName);
+		Element element = (Element) nodeList.item(0);
+		if (element != null) {
+			NodeList childNodes = element.getChildNodes();
+			if (childNodes.getLength() > 0) {
+				return childNodes.item(0).getNodeValue();
+			}
 		}
+		return "";
+	}
+
+	/**
+	 * Gets the rss feeds.
+	 *
+	 * @return the rss feeds
+	 * @throws ResourceAlreadyFoundException the resource already found exception
+	 */
+	@Scheduled(fixedRate = 300000)
+	public Feeds getRssFeeds() throws ResourceAlreadyFoundException {
+
+		Feeds feedsData = new Feeds();
+		String feedUrl = "https://podcastfeeds.nbcnews.com/HL4TzgYC";
+		try {
+			URL url = new URL(feedUrl);
+			DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+			DocumentBuilder db = dbf.newDocumentBuilder();
+			Document doc = db.parse(new InputSource(url.openStream()));
+			doc.getDocumentElement().normalize();
+
+			NodeList itemNodeList = doc.getElementsByTagName("item");
+			List<Feeds> rssItems = new ArrayList<>();
+
+			for (int i = 0; i < itemNodeList.getLength(); i++) {
+				Node itemNode = itemNodeList.item(i);
+
+				if (itemNode.getNodeType() == Node.ELEMENT_NODE) {
+					Element itemElement = (Element) itemNode;
+
+					String title = getElementValue(itemElement, "title");
+					String publicationDate = getElementValue(itemElement, "pubDate");
+					String description = getElementValue(itemElement, "description");
+
+					Feeds rssItem = new Feeds(title, description, publicationDate);
+					rssItems.add(rssItem);
+
+				}
+			}
+
+//			 Process the RSS items
+			int limit = 1;
+			for (Feeds rssItem : rssItems) {
+				if (limit <= 10) {
+					feedsData.setId(0L);
+					feedsData.setTitle(rssItem.getTitle());
+					feedsData.setDescription(rssItem.getDescription());
+					feedsData.setPublicationDate(rssItem.getPublicationDate());
+					feedsService.getRssFeeds(feedsData);
+				} else {
+					break;
+				}
+				limit++;
+
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return feedsData;
 
 	}
 
+	/**
+	 * Gets the all feeds.
+	 *
+	 * @param title the title
+	 * @param page the page
+	 * @param size the size
+	 * @param sort the sort
+	 * @return the all feeds
+	 * @throws ResourceNotFoundException the resource not found exception
+	 */
 	@GetMapping(AppConstants.FEEDS_URL)
-	public ResponseEntity<Map<String, Object>> getAllFeeds(
-			@RequestParam(required = false) String title,
-			@RequestParam(defaultValue = "0") int page, 
-			@RequestParam(defaultValue = "3") int size,
+	public ResponseEntity<Map<String, Object>> getAllFeeds(@RequestParam(required = false) String title,
+			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "3") int size,
 			@RequestParam(defaultValue = "id,desc") String[] sort) throws ResourceNotFoundException {
 		logger.info("Logging Stated!!! Inside Feeds Controller @Get All Feeds Method Initiated");
 
@@ -121,16 +208,67 @@ public class FeedsController {
 
 	}
 
-	@PutMapping(AppConstants.FEED_BY_ID_URL)
-	public ResponseEntity<?> updateProduct(@RequestBody Feeds feedsRequest, @PathVariable Long id) throws Exception {
-		logger.info("Logging Stated!!! Inside Feeds Controller @Get Feed By ID Method Initiated");
-		Optional<Feeds> feedsData = feedsRepo.findById(id);
-		if (feedsData != null) {
-			logger.info("Loggig Stated!!! Inside Feeds Controller @Update Feed Method Initiated");
-			return new ResponseEntity<>(feedsService.updateFeed(feedsRequest, id), HttpStatus.OK);
-		} else {
-			return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+	/**
+	 * Update RSS feeds.
+	 *
+	 * @return the feeds
+	 * @throws Exception the exception
+	 */
+	@Scheduled(fixedRate = 1200000)
+	public Feeds updateRSSFeeds() throws Exception {
+		Feeds feedsData1 = new Feeds();
+		String feedUrl = "https://podcastfeeds.nbcnews.com/HL4TzgYC";
+		try {
+			URL url = new URL(feedUrl);
+			DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+			DocumentBuilder db = dbf.newDocumentBuilder();
+			Document doc = db.parse(new InputSource(url.openStream()));
+			doc.getDocumentElement().normalize();
+
+			NodeList itemNodeList = doc.getElementsByTagName("item");
+			List<Feeds> rssItems = new ArrayList<>();
+
+			for (int i = 0; i < itemNodeList.getLength(); i++) {
+				Node itemNode = itemNodeList.item(i);
+
+				if (itemNode.getNodeType() == Node.ELEMENT_NODE) {
+					Element itemElement = (Element) itemNode;
+
+					String title = getElementValue(itemElement, "title");
+					String publicationDate = getElementValue(itemElement, "pubDate");
+					String description = getElementValue(itemElement, "description");
+
+					Feeds rssItem = new Feeds(title, description, publicationDate);
+					rssItems.add(rssItem);
+
+				}
+			}
+
+//			 Process the RSS items
+			int limit = 1;
+			for (Feeds rssItem : rssItems) {
+				if (limit <= 10) {
+					logger.info("Logging Stated!!! Inside Feeds Controller @Get Feed By ID Method Initiated");
+					if (feedsRepo.existsByTitle(rssItem.getTitle()) == true) {
+						throw new ResourceAlreadyFoundException("Feeds already found with title :" + rssItem.getTitle());
+					} else {
+						feedsData1.setId(0L);
+						feedsData1.setTitle(rssItem.getTitle());
+						feedsData1.setDescription(rssItem.getDescription());
+						feedsData1.setPublicationDate(rssItem.getPublicationDate());
+						feedsService.getRssFeeds(feedsData1);
+					}
+
+				} else {
+					break;
+				}
+				limit++;
+
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
+		return feedsData1;
 
 	}
 
